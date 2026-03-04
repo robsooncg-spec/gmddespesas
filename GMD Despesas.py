@@ -397,13 +397,20 @@ def gerar_excel(grp, mc, mes, ano):
     d8.font=Font(name=FN,size=9,color='1F3864'); d8.fill=fl('D6E4F0')
     d8.alignment=Alignment(horizontal='left',vertical='center',indent=1); d8.border=bm
     wm.row_dimensions[8].height=24
-    wm.row_dimensions[9].height=10
-    wm.merge_cells('B10:C10'); wm['B10']='  PACOTES'
-    wm['B10'].font=Font(name=FN,bold=True,size=9,color='FFFFFF'); wm['B10'].fill=fl(CP)
-    wm['B10'].alignment=Alignment(horizontal='left',vertical='center'); wm.row_dimensions[10].height=18
+    c9=wm.cell(row=9,column=2,value='Desvios Significativos')
+    c9.font=Font(name=FN,bold=True,size=10,color='FFFFFF'); c9.fill=fl('9C0006')
+    c9.alignment=Alignment(horizontal='left',vertical='center',indent=1); c9.border=bm; c9.hyperlink='#DESVIOS!A1'
+    d9=wm.cell(row=9,column=3,value='Contas com desvio acima de R$ 5.000')
+    d9.font=Font(name=FN,size=9,color='1F3864'); d9.fill=fl('D6E4F0')
+    d9.alignment=Alignment(horizontal='left',vertical='center',indent=1); d9.border=bm
+    wm.row_dimensions[9].height=24
+    wm.row_dimensions[10].height=10
+    wm.merge_cells('B11:C11'); wm['B11']='  PACOTES'
+    wm['B11'].font=Font(name=FN,bold=True,size=9,color='FFFFFF'); wm['B11'].fill=fl(CP)
+    wm['B11'].alignment=Alignment(horizontal='left',vertical='center'); wm.row_dimensions[11].height=18
     gm=grp.groupby('Nome do pacote')['Gestor do pacote'].first().to_dict()
     CB=['1A5276','1F618D','2471A3','2980B9','5499C8','7FB3D3','2E86C1','1B4F72','154360','1A5276','117A65']
-    rm3=11
+    rm3=12
     for ki,pac in enumerate(pacotes):
         gr2=gm.get(pac,''); gn2=gr2.split('@')[0].replace('.',' ').title() if '@' in gr2 else gr2
         cb2=wm.cell(row=rm3,column=2,value='PACOTE: '+pac)
@@ -426,6 +433,91 @@ def gerar_excel(grp, mc, mes, ano):
         bc.hyperlink='#MENU!A1'; bc.font=Font(name=FN,bold=True,size=9,color='FFFFFF')
         bc.fill=fl(CP); bc.alignment=Alignment(horizontal='center',vertical='center')
         bc.border=bm; wt.column_dimensions[get_column_letter(nc)].width=12
+
+    # ── ABA DESVIOS ───────────────────────────────────────────────────────────
+    LIMITE = 5000
+    wd = wb.create_sheet(title='DESVIOS')
+    wd.sheet_view.showGridLines = False
+    wd.freeze_panes = 'A6'
+
+    wd.merge_cells('A1:H2')
+    wd['A1'] = 'DESVIOS SIGNIFICATIVOS - AH R$ ACIMA DE R$ 5.000'
+    wd['A1'].font = Font(name=FN, bold=True, size=13, color='FFFFFF')
+    wd['A1'].fill = fl('9C0006')
+    wd['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    wd.row_dimensions[1].height = 22; wd.row_dimensions[2].height = 6
+
+    wd.merge_cells('A3:H3')
+    wd['A3'] = 'Desvios do mes {}/{} | Positivo = Economia | Negativo = Estouro'.format(mes, ano)
+    wd['A3'].font = Font(name=FN, italic=True, size=9, color='FFFFFF')
+    wd['A3'].fill = fl('CC0000')
+    wd['A3'].alignment = Alignment(horizontal='center', vertical='center')
+    wd.row_dimensions[3].height = 14; wd.row_dimensions[4].height = 6
+
+    hdrs_d = ['Pacote','Gestor','Estrutura','Descricao','Orcado Mes','Realizado Mes','AH R$','Justificativa']
+    wds_d  = [18, 22, 14, 40, 16, 16, 16, 45]
+    for j,(h,w) in enumerate(zip(hdrs_d, wds_d), 1):
+        c = wd.cell(row=5, column=j, value=h)
+        c.font = Font(name=FN, bold=True, color='FFFFFF', size=9)
+        c.fill = fl('9C0006') if h != 'Justificativa' else fl('1F3864')
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = bd()
+        wd.column_dimensions[get_column_letter(j)].width = w
+    wd.row_dimensions[5].height = 22
+
+    pm_d = 'Planejado{}/{}'.format(mes, ano)
+    rm_d = 'Realizado{}/{}'.format(mes, ano)
+    row_d = 6
+    for pac in pacotes:
+        sub = grp[grp['Nome do pacote'] == pac].reset_index(drop=True)
+        g = sub['Gestor do pacote'].iloc[0] if len(sub) else ''
+        gn = g.split('@')[0].replace('.', ' ').title() if '@' in g else g
+        for _, r in sub.iterrows():
+            om_d = r[pm_d]; rm2_d = r[rm_d]; ah_d = rm2_d - om_d
+            if abs(ah_d) < LIMITE: continue
+            bg     = 'F0FFF0' if ah_d > 0 else 'FFF0F0'
+            ah_cor = '375623' if ah_d > 0 else '9C0006'
+            vals_d = [pac, gn, r['Estr. da conta'], r['Descricao da conta'], om_d, rm2_d, ah_d, '']
+            for j, v in enumerate(vals_d, 1):
+                c = wd.cell(row=row_d, column=j, value=v)
+                c.fill = fl(bg); c.border = bd()
+                c.alignment = Alignment(vertical='center', horizontal='right' if j in (5,6,7) else 'left', wrap_text=(j==8))
+                if j in (5,6,7):
+                    c.number_format = NF
+                    if j == 7: c.font = Font(name=FN, size=9, bold=True, color=ah_cor)
+                    else:      c.font = Font(name=FN, size=9)
+                elif j == 8:
+                    c.fill = fl('FFFDE7')
+                    c.font = Font(name=FN, size=9, italic=True, color='999999')
+                    c.value = 'Digite aqui...'
+                else:
+                    c.font = Font(name=FN, size=9, bold=(j==1))
+            wd.row_dimensions[row_d].height = 18
+            row_d += 1
+
+    if row_d > 6:
+        wd.merge_cells('A{}:D{}'.format(row_d, row_d))
+        wd['A{}'.format(row_d)] = 'TOTAL ({} desvios)'.format(row_d - 6)
+        wd['A{}'.format(row_d)].font = Font(name=FN, bold=True, size=9, color='FFFFFF')
+        wd['A{}'.format(row_d)].fill = fl('9C0006')
+        wd['A{}'.format(row_d)].alignment = Alignment(horizontal='center', vertical='center')
+        for j in range(1, 9):
+            c = wd.cell(row=row_d, column=j); c.fill = fl('9C0006'); c.border = bd()
+            cl = get_column_letter(j)
+            if j in (5,6,7):
+                c.value = '=SUM({}6:{}{})'.format(cl, cl, row_d-1)
+                c.font = Font(name=FN, bold=True, size=9, color='FFFFFF')
+                c.number_format = NF
+                c.alignment = Alignment(horizontal='right', vertical='center')
+        wd.row_dimensions[row_d].height = 20
+    else:
+        wd.merge_cells('A6:H6')
+        wd['A6'] = 'Nenhum desvio acima de R$ 5.000 encontrado no mes {}/{}'.format(mes, ano)
+        wd['A6'].font = Font(name=FN, italic=True, size=10, color='666666')
+        wd['A6'].alignment = Alignment(horizontal='center', vertical='center')
+        wd.row_dimensions[6].height = 30
+
+    ab(wd)
     ab(ws); ab(wc)
     for pac in pacotes: ab(wb[pac[:31]])
     buf=io.BytesIO(); wb.save(buf); buf.seek(0); return buf
